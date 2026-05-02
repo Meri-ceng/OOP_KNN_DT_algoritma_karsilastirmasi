@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProLab-II · KNN & Decision Tree Analizi</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg:       #0b0e14;
+    --surface:  #131720;
+    --border:   #1e2636;
+    --accent:   #3dffa0;
+    --accent2:  #ff6b6b;
+    --accent3:  #ffd166;
+    --text:     #e4eaf4;
+    --muted:    #6b7a99;
+    --knn:      #3dffa0;
+    --dt:       #ff6b6b;
+    --radius:   10px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  /* ---- GRID NOISE BACKGROUND ---- */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(61,255,160,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(61,255,160,.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  /* ---- TOP HEADER ---- */
+  header {
+    position: relative; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 36px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(11,14,20,.9);
+    backdrop-filter: blur(12px);
+  }
+  header h1 {
+    font-size: 1.1rem; font-weight: 800;
+    letter-spacing: .08em; text-transform: uppercase;
+  }
+  header h1 span { color: var(--accent); }
+  .header-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: .7rem; color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 4px 10px; border-radius: 20px;
+  }
+
+  /* ---- MAIN LAYOUT ---- */
+  main {
+    position: relative; z-index: 1;
+    display: flex;
+    height: calc(100vh - 61px);
+    overflow: hidden;
+  }
+
+  /* Sidebar: sabit yükseklik, kendi içinde scroll */
+  .sidebar {
+    width: 300px;
+    min-width: 300px;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 20px 16px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    border-right: 1px solid var(--border);
+  }
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* Sağ içerik: kendi içinde scroll */
+  .content-area {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+  .content-area > * {
+    min-width: 600px;
+  }
+  .content-area::-webkit-scrollbar { width: 6px; height: 6px; }
+  .content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .content-area::-webkit-scrollbar-corner { background: var(--bg); }
+
+  /* ---- CARDS ---- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+  }
+  .card-title {
+    font-size: .65rem; font-weight: 800; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted);
+    margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-title::before {
+    content: ''; display: inline-block;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* sidebar artık yukarıda tanımlandı */
+
+  /* ---- UPLOAD ZONE ---- */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    position: relative;
+  }
+  .upload-zone:hover { border-color: var(--accent); background: rgba(61,255,160,.04); }
+  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .upload-icon { font-size: 2rem; margin-bottom: 8px; }
+  .upload-zone p { font-size: .8rem; color: var(--muted); }
+  .upload-zone strong { font-size: .85rem; color: var(--text); display: block; margin-bottom: 4px; }
+  #file-name { font-family: 'Space Mono', monospace; font-size: .7rem; color: var(--accent); margin-top: 8px; }
+
+  /* ---- FORM ELEMENTS ---- */
+  label { font-size: .75rem; color: var(--muted); display: block; margin-bottom: 5px; margin-top: 12px; }
+  select, input[type=number] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: .8rem;
+    padding: 9px 12px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  select:focus, input[type=number]:focus { border-color: var(--accent); }
+
+  .algo-toggle {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px;
+  }
+  .algo-btn {
+    padding: 9px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--muted);
+    font-family: 'Syne', sans-serif; font-size: .78rem; font-weight: 600;
+    cursor: pointer; text-align: center;
+    transition: all .2s;
+  }
+  .algo-btn.active-knn  { border-color: var(--knn); color: var(--knn); background: rgba(61,255,160,.08); }
+  .algo-btn.active-dt   { border-color: var(--dt);  color: var(--dt);  background: rgba(255,107,107,.08); }
+
+  /* ---- PARAM PANELS ---- */
+  #knn-params, #dt-params { display: none; }
+  #knn-params.visible, #dt-params.visible { display: block; }
+
+  /* ---- RUN BUTTON ---- */
+  .run-btn {
+    width: 100%; margin-top: 16px;
+    padding: 13px; border-radius: 8px;
+    background: var(--accent); color: var(--bg);
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: .9rem; letter-spacing: .06em;
+    border: none; cursor: pointer;
+    transition: opacity .2s, transform .1s;
+  }
+  .run-btn:hover  { opacity: .85; }
+  .run-btn:active { transform: scale(.98); }
+  .run-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+  /* ---- METRICS GRID ---- */
+  .metrics-area { }
+  .metric-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    grid-template-rows: auto auto;
+  }
+  .metric-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+    transition: border-color .3s;
+  }
+  .metric-box.knn-box  { border-top: 2px solid var(--knn); }
+  .metric-box.dt-box   { border-top: 2px solid var(--dt); }
+  .metric-tag {
+    font-size: .6rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 6px;
+  }
+  .metric-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.5rem; font-weight: 700;
+  }
+  .metric-val.knn-col { color: var(--knn); }
+  .metric-val.dt-col  { color: var(--dt);  }
+  .metric-sub { font-size: .65rem; color: var(--muted); margin-top: 3px; 
+  }
+
+  /* ---- CHARTS AREA ---- */
+  .charts-area { }
+  .charts-inner {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  canvas { width: 100% !important; }
+
+  /* ---- STATUS BAR ---- */
+  #status {
+    font-family: 'Space Mono', monospace;
+    font-size: .7rem; color: var(--muted);
+    text-align: center; padding: 8px;
+    transition: color .3s;
+  }
+  #status.running { color: var(--accent3); }
+  #status.done    { color: var(--accent); }
+  #status.error   { color: var(--dt); }
+
+  /* ---- CONFUSION MATRIX ---- */
+  .cm-wrap { overflow-x: auto; margin-top: 8px; }
+  .cm-table {
+    border-collapse: collapse;
+    font-family: 'Space Mono', monospace;
+    font-size: .65rem;
+    width: 100%;
+  }
+  .cm-table th, .cm-table td {
+    border: 1px solid var(--border);
+    padding: 5px 8px;
+    text-align: center;
+    min-width: 64px;
+  }
+  .cm-table th { color: var(--muted); background: var(--bg); }
+  .cm-table td.diagonal { background: rgba(61,255,160,.15); color: var(--accent); font-weight: 700; }
+  .cm-table td.off      { color: var(--dt); }
+
+  /* ---- LOADER ---- */
+  .loader {
+    display: none;
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    animation: spin .7s linear infinite;
+    margin: 0 auto;
+  }
+  .loader.active { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); }
+}
+
+
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ProLab<span>-II</span> · ML Karşılaştırma Paneli</h1>
+  <span class="header-badge">Kocaeli Üniversitesi · BM</span>
+</header>
+
+<main>
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar">
+
+    <!-- Veri Yükleme -->
+    <div class="card">
+      <div class="card-title">Veri Kümesi</div>
+      <div class="upload-zone" id="drop-zone">
+        <input type="file" id="file-input" accept=".xlsx,.csv" onclick="this.value=''">
+        <div class="upload-icon">📂</div>
+        <strong>Dosya Seç veya Sürükle</strong>
+        <p>MarketSalesKocaeli.xlsx</p>
+        <div id="file-name">Henüz dosya seçilmedi</div>
+      </div>
+
+      <!-- Sütun eşleştirme -->
+      <div id="col-map-section" style="display:none; margin-top:12px;">
+        <div style="font-size:.65rem;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;">📋 Sütun Eşleştirme</div>
+        <div style="font-size:.7rem;color:var(--muted);margin-bottom:10px;">Dosyadaki sütun adlarını alanlara eşleştirin:</div>
+        <label>Cinsiyet (Gender)</label>
+        <select id="col-gender" style="font-size:.75rem"></select>
+        <label>Toplam Ücret (LineNetTotal)</label>
+        <select id="col-linenet" style="font-size:.75rem"></select>
+        <label>Marka Kodu (BrandCode)</label>
+        <select id="col-brandcode" style="font-size:.75rem"></select>
+        <label>Kategori / Hedef (Category) ★</label>
+        <select id="col-category" style="font-size:.75rem"></select>
+        <button onclick="applyMapping()" style="margin-top:10px;width:100%;padding:9px;border-radius:6px;border:1px solid var(--accent);background:rgba(61,255,160,.1);color:var(--accent);font-family:Syne,sans-serif;font-weight:700;font-size:.8rem;cursor:pointer;">✓ Eşleştirmeyi Uygula</button>
+        <div id="col-preview" style="margin-top:8px;font-family:Space Mono,monospace;font-size:.65rem;color:var(--muted);min-height:16px;"></div>
+      </div>
+
+      <label>Eğitim / Test Oranı</label>
+      <select id="split-ratio">
+        <option value="0.7">70% Eğitim / 30% Test</option>
+        <option value="0.8" selected>80% Eğitim / 20% Test</option>
+        <option value="0.9">90% Eğitim / 10% Test</option>
+      </select>
+    </div>
+
+    <!-- Algoritma Seçimi -->
+    <div class="card">
+      <div class="card-title">Algoritma</div>
+      <div class="algo-toggle">
+        <button class="algo-btn active-knn" id="btn-knn" onclick="toggleAlgo('knn')">KNN</button>
+        <button class="algo-btn active-dt"  id="btn-dt"  onclick="toggleAlgo('dt')">Decision Tree</button>
+      </div>
+
+      <!-- KNN Parametreleri -->
+      <div id="knn-params" class="visible">
+        <label>K Değeri (Komşu Sayısı)</label>
+        <input type="number" id="k-value" value="5" min="1" max="50">
+        <label>Mesafe Metriği</label>
+        <select id="distance-metric">
+          <option value="euclidean" selected>Öklid (Euclidean)</option>
+          <option value="manhattan">Manhattan</option>
+        </select>
+      </div>
+
+      <!-- Decision Tree Parametreleri -->
+      <div id="dt-params" class="visible">
+        <label>Maksimum Derinlik (maxDepth)</label>
+        <input type="number" id="max-depth" value="10" min="1" max="50">
+        <label>Min. Örnek Sayısı (minSamplesSplit)</label>
+        <input type="number" id="min-samples" value="5" min="1" max="100">
+        <label>Dallanma Kriteri</label>
+        <select id="split-criterion">
+          <option value="gini" selected>Gini Impurity</option>
+          <option value="entropy">Information Gain</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Run -->
+    <div class="card" style="text-align:center">
+      <div class="loader" id="loader"></div>
+      <button class="run-btn" id="run-btn" onclick="runSimulation()">▶ Modeli Çalıştır</button>
+      <div id="status" style="margin-top:8px">Veri yükleyip çalıştırın.</div>
+    </div>
+
+  </aside>
+
+  <!-- ===================== RIGHT CONTENT ===================== -->
+  <div class="content-area">
+
+  <!-- ===================== METRICS ===================== -->
+  <section class="card metrics-area">
+    <div class="card-title">Performans Metrikleri</div>
+    <div class="metric-grid">
+      <div class="metric-box knn-box">
+        <div class="metric-tag">KNN · Doğruluk</div>
+        <div class="metric-val knn-col" id="knn-acc">—</div>
+        <div class="metric-sub" id="knn-acc-sub">-</div>
+      </div>
+      <div class="metric-box knn-box">
+        <div class="metric-tag">KNN · Süre</div>
+        <div class="metric-val knn-col" id="knn-time">—</div>
+        <div class="metric-sub">ms (tahmin)</div>
+      </div>
+      <div class="metric-box knn-box">
+        <div class="metric-tag">KNN · Bellek</div>
+        <div class="metric-val knn-col" id="knn-mem">—</div>
+        <div class="metric-sub">MB (eğitim verisi)</div>
+      </div>
+      <div class="metric-box dt-box">
+        <div class="metric-tag">DT · Doğruluk</div>
+        <div class="metric-val dt-col" id="dt-acc">—</div>
+        <div class="metric-sub" id="dt-acc-sub">-</div>
+      </div>
+      <div class="metric-box dt-box">
+        <div class="metric-tag">DT · Süre</div>
+        <div class="metric-val dt-col" id="dt-time">—</div>
+        <div class="metric-sub">ms (tahmin)</div>
+      </div>
+      <div class="metric-box dt-box">
+        <div class="metric-tag">DT · Bellek</div>
+        <div class="metric-val dt-col" id="dt-mem">—</div>
+        <div class="metric-sub">MB (model ağacı)</div>
+      </div>
+    </div>
+
+    <!-- Hata Matrisi -->
+    <div style="margin-top:24px; display:grid; grid-template-columns:1fr 1fr; gap:16px">
+      <div>
+        <div class="card-title" style="color:var(--knn)">KNN Hata Matrisi</div>
+        <div class="cm-wrap"><div id="knn-cm">—</div></div>
+      </div>
+      <div>
+        <div class="card-title" style="color:var(--dt)">Decision Tree Hata Matrisi</div>
+        <div class="cm-wrap"><div id="dt-cm">—</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CHARTS ===================== -->
+  <section class="card charts-area">
+    <div class="card-title">Görselleştirme</div>
+    <div class="charts-inner">
+      <div>
+        <p style="font-size:.7rem;color:var(--muted);margin-bottom:8px">Doğruluk Karşılaştırması</p>
+        <canvas id="chart-accuracy" height="200"></canvas>
+      </div>
+      <div>
+        <p style="font-size:.7rem;color:var(--muted);margin-bottom:8px">Tahmin Süresi (ms)</p>
+        <canvas id="chart-time" height="200"></canvas>
+      </div>
+      <div>
+        <p style="font-size:.7rem;color:var(--muted);margin-bottom:8px">Kategori Dağılımı (Test)</p>
+        <canvas id="chart-dist" height="200"></canvas>
+      </div>
+      <div>
+        <p style="font-size:.7rem;color:var(--muted);margin-bottom:8px">K Değerine Göre KNN Doğruluk</p>
+        <canvas id="chart-knn-k" height="200"></canvas>
+      </div>
+    </div>
+  </section>
+  </div><!-- /content-area -->
+</main>
+
+<!-- SheetJS - xlsx okuma için (blocking: script hazır olmadan dosya kabul etme) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Chart.js CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+// ======================================================
+// STATE
+// ======================================================
+let csvData     = null;   // parsed rows [{gender, lineNetTotal, brandCode, category}, ...]
+let algoKNN     = true;
+let algoDT      = true;
+let charts      = {};
+
+// ======================================================
+// FILE INPUT - raw rows (column mapping sonrası işlenir)
+// ======================================================
+let rawRows    = [];   // xlsx/csv'den okunan ham satırlar
+let allColumns = [];   // tüm sütun başlıkları
+
+document.getElementById('file-input').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  csvData = null; // önceki veriyi sıfırla
+  document.getElementById('file-name').textContent = file.name;
+  setStatus('Dosya okunuyor...', 'running');
+  try {
+    rawRows = await readRawRows(file);
+    if (!rawRows.length) throw new Error('Dosyada satır bulunamadı.');
+    allColumns = Object.keys(rawRows[0]);
+    showColumnMapper(allColumns);
+    setStatus(`✓ ${rawRows.length} satır okundu — sütunları eşleştirin`, 'done');
+  } catch(err) {
+    setStatus('Dosya okunamadı: ' + err.message, 'error');
+    console.error(err);
+  }
+});
+
+// Ham xlsx/csv satırlarını oku (normalize etme)
+async function readRawRows(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.csv')) {
+    const text  = await file.text();
+    const lines = text.split('\n').filter(l => l.trim());
+    if (!lines.length) return [];
+    const headers = lines[0].split(',').map(h => h.trim());
+    return lines.slice(1).map(line => {
+      const vals = line.split(',');
+      const obj  = {};
+      headers.forEach((h, i) => obj[h] = (vals[i] || '').trim());
+      return obj;
+    });
+  }
+  // xlsx
+  if (typeof XLSX === 'undefined') throw new Error('SheetJS yüklenemedi. Sayfayı yenileyin.');
+  const buf  = await file.arrayBuffer();
+  const wb   = XLSX.read(new Uint8Array(buf), { type: 'array' });
+  const ws   = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+}
+
+// Sütun eşleştirme arayüzünü doldur
+function showColumnMapper(columns) {
+  const ids = ['col-gender','col-linenet','col-brandcode','col-category'];
+  // Otomatik tahmin: sütun adında anahtar kelime geçiyorsa seç
+  const hints = {
+    'col-gender':    ['gender','cinsiyet','sex'],
+    'col-linenet':   ['linenet','net','total','tutar','price','amount','fiyat'],
+    'col-brandcode': ['brandcode','brand_code','marka','brand'],
+    'col-category':  ['category','kategori','cat','sinif','class','label']
+  };
+  ids.forEach(id => {
+    const sel = document.getElementById(id);
+    sel.innerHTML = '<option value="">-- Seçin --</option>' +
+      columns.map(c => `<option value="${c}">${c}</option>`).join('');
+    // Otomatik eşleştir
+    const kws = hints[id] || [];
+    const match = columns.find(c => kws.some(k => c.toLowerCase().includes(k)));
+    if (match) sel.value = match;
+  });
+  document.getElementById('col-map-section').style.display = 'block';
+  document.getElementById('col-preview').textContent = '';
+}
+
+// Kullanıcı "Eşleştirmeyi Uygula" butonuna basınca
+function applyMapping() {
+  const gCol  = document.getElementById('col-gender').value;
+  const lCol  = document.getElementById('col-linenet').value;
+  const bCol  = document.getElementById('col-brandcode').value;
+  const cCol  = document.getElementById('col-category').value;
+
+  if (!cCol) { alert('Lütfen en az Kategori sütununu seçin!'); return; }
+
+  csvData = rawRows.map(r => ({
+    clientCode:   String(r['ClientCode'] || r['clientcode'] || ''),
+    gender:       String(gCol ? r[gCol] : 'Unknown').trim(),
+    lineNetTotal: parseFloat(String(lCol ? r[lCol] : '0').replace(',','.')) || 0,
+    brand:        String(r['Brand'] || r['brand'] || '').trim(),
+    brandCode:    String(bCol ? r[bCol] : '0').trim(),
+    category:     String(r[cCol] || '').trim(),
+  })).filter(r => r.category !== '');
+
+  const preview = document.getElementById('col-preview');
+  if (!csvData.length) {
+    preview.style.color = 'var(--dt)';
+    preview.textContent = '⚠ Eşleştirme sonrası 0 kayıt. Kategori sütununu kontrol edin.';
+    csvData = null;
+    return;
+  }
+  preview.style.color = 'var(--accent)';
+  const sample = csvData[0];
+  preview.textContent = `✓ ${csvData.length} kayıt hazır\nÖrnek: ${sample.gender} | ${sample.lineNetTotal} | ${sample.category}`;
+  setStatus(`✓ ${csvData.length} kayıt eşleştirildi — hazır`, 'done');
+}
+
+// ======================================================
+// ALGO TOGGLE
+// ======================================================
+function toggleAlgo(algo) {
+  // Her iki de her zaman aktif (karşılaştırma için)
+  document.getElementById('knn-params').classList.add('visible');
+  document.getElementById('dt-params').classList.add('visible');
+}
+
+// ======================================================
+// SIMULATION (JS implementasyonu - Java backend yokken preview)
+// ======================================================
+async function runSimulation() {
+  if (!csvData || csvData.length === 0) {
+    setStatus('Önce veri dosyası yükleyin!', 'error'); return;
+  }
+  setStatus('Model eğitiliyor...', 'running');
+  document.getElementById('loader').classList.add('active');
+  document.getElementById('run-btn').disabled = true;
+
+  await sleep(50); // UI update
+
+  try {
+    const splitRatio    = parseFloat(document.getElementById('split-ratio').value);
+    const k             = parseInt(document.getElementById('k-value').value)   || 5;
+    const maxDepth      = parseInt(document.getElementById('max-depth').value)  || 10;
+    const minSamples    = parseInt(document.getElementById('min-samples').value)|| 5;
+
+    // Ön işleme
+    const {train, test} = splitData(csvData, splitRatio);
+    const {encTrain, encTest, categories} = preProcess(train, test);
+
+    setStatus('KNN çalışıyor...', 'running');
+    await sleep(20);
+
+    // KNN
+    const knnStart = performance.now();
+    knnTrain(encTrain);
+    const knnPreds = encTest.map(r => knnPredict(r, encTrain, k));
+    const knnTime  = Math.round(performance.now() - knnStart);
+    const knnAcc   = calcAccuracy(knnPreds, encTest);
+
+    setStatus('Decision Tree eğitiliyor...', 'running');
+    await sleep(20);
+
+    // Decision Tree
+    const dtStart = performance.now();
+    const dtRoot  = dtTrain(encTrain, maxDepth, minSamples);
+    const dtPreds = encTest.map(r => dtPredict(dtRoot, r));
+    const dtTime  = Math.round(performance.now() - dtStart);
+    const dtAcc   = calcAccuracy(dtPreds, encTest);
+
+    // Confusion matrices
+    const knnCM = buildCM(knnPreds, encTest, categories);
+    const dtCM  = buildCM(dtPreds,  encTest, categories);
+
+    // Bellek kullanımı tahmini
+    const knnMem = estimateKNNMemoryMB(encTrain);
+    const dtMem  = estimateDTMemoryMB(dtRoot);
+
+    // Category distribution
+    const catDist = {};
+    encTest.forEach(r => catDist[r.category] = (catDist[r.category]||0)+1);
+
+    // K sweep for KNN chart
+    const kSweep = await sweepK(encTrain, encTest, [1,3,5,7,10,15,20]);
+
+    renderMetrics(knnAcc, knnTime, encTest.length, dtAcc, dtTime, knnMem, dtMem);
+    renderCM('knn-cm', knnCM, categories);
+    renderCM('dt-cm',  dtCM,  categories);
+    renderCharts(knnAcc, dtAcc, knnTime, dtTime, catDist, kSweep);
+
+    setStatus(`✓ Tamamlandı — KNN: ${knnAcc.toFixed(1)}%  DT: ${dtAcc.toFixed(1)}%`, 'done');
+
+  } catch(err) {
+    setStatus('Hata: ' + err.message, 'error');
+    console.error(err);
+  }
+
+  document.getElementById('loader').classList.remove('active');
+  document.getElementById('run-btn').disabled = false;
+}
+
+// ======================================================
+// DATA SPLIT
+// ======================================================
+function splitData(data, ratio) {
+  const shuffled = [...data].sort(() => Math.random() - .5);
+  const n = Math.floor(shuffled.length * ratio);
+  return { train: shuffled.slice(0,n), test: shuffled.slice(n) };
+}
+
+// ======================================================
+// PRE-PROCESSING
+// ======================================================
+function preProcess(train, test) {
+  // Gender encoding
+  const genderMap = {'female':0,'f':0,'male':1,'m':1};
+
+  // Brand code -> numeric id
+  const brandCodes = [...new Set(train.map(r=>r.brandCode))];
+  const brandMap   = {};
+  brandCodes.forEach((b,i) => brandMap[b] = i);
+
+  // Min-max for lineNetTotal
+  const vals = train.map(r=>r.lineNetTotal);
+  const minV = Math.min(...vals), maxV = Math.max(...vals);
+  const norm = v => maxV===minV ? 0 : (v-minV)/(maxV-minV);
+
+  // Categories
+  const categories = [...new Set([...train,...test].map(r=>r.category))].sort();
+
+  const encode = rows => rows.map(r => ({
+    ...r,
+    enc: [
+      genderMap[r.gender.toLowerCase()] ?? 0,
+      norm(r.lineNetTotal),
+      (brandMap[r.brandCode] ?? 0) / Math.max(1, brandCodes.length-1)
+    ]
+  }));
+
+  return { encTrain: encode(train), encTest: encode(test), categories };
+}
+
+// ======================================================
+// KNN
+// ======================================================
+let _knnTrain = [];
+function knnTrain(data) { _knnTrain = data; }
+
+function knnPredict(record, train, k) {
+  const q = record.enc;
+  const dists = train.map(r => ({
+    dist: euclidean(q, r.enc),
+    cat:  r.category
+  }));
+  dists.sort((a,b) => a.dist-b.dist);
+  const neighbors = dists.slice(0,k).map(d=>d.cat);
+  return majorityVote(neighbors);
+}
+
+function euclidean(a, b) {
+  return Math.sqrt(a.reduce((s,v,i) => s+(v-b[i])**2, 0));
+}
+
+// ======================================================
+// DECISION TREE
+// ======================================================
+function dtTrain(data, maxDepth, minSamples) {
+  return buildDT(data, 0, maxDepth, minSamples);
+}
+
+function buildDT(data, depth, maxDepth, minSamples) {
+  if (!data.length) return { leaf: true, label: 'Unknown' };
+  const labels = data.map(r=>r.category);
+  if (depth >= maxDepth || data.length < minSamples || isPure(labels)) {
+    return { leaf: true, label: majority(labels) };
+  }
+  const best = findBestSplit(data);
+  if (!best) return { leaf: true, label: majority(labels) };
+
+  const left  = data.filter(r => r.enc[best.fi] <= best.th);
+  const right = data.filter(r => r.enc[best.fi] >  best.th);
+  if (!left.length || !right.length) return { leaf: true, label: majority(labels) };
+
+  return {
+    leaf: false,
+    fi: best.fi, th: best.th,
+    left:  buildDT(left,  depth+1, maxDepth, minSamples),
+    right: buildDT(right, depth+1, maxDepth, minSamples)
+  };
+}
+
+function findBestSplit(data) {
+  let best = null;
+  const nFeat = data[0].enc.length;
+  const pGini = gini(data.map(r=>r.category));
+
+  for (let fi=0; fi<nFeat; fi++) {
+    const vals = [...new Set(data.map(r=>r.enc[fi]))];
+    for (const th of vals) {
+      const l = data.filter(r=>r.enc[fi]<=th);
+      const r = data.filter(r=>r.enc[fi]>th);
+      if (!l.length || !r.length) continue;
+      const wg = (l.length*gini(l.map(x=>x.category)) + r.length*gini(r.map(x=>x.category))) / data.length;
+      const gain = pGini - wg;
+      if (!best || gain > best.gain) best = {fi, th, gain};
+    }
+  }
+  return best;
+}
+
+function gini(labels) {
+  const n = labels.length; if (!n) return 0;
+  const counts = {};
+  labels.forEach(l => counts[l]=(counts[l]||0)+1);
+  return 1 - Object.values(counts).reduce((s,c)=>s+(c/n)**2, 0);
+}
+
+function isPure(labels) { return new Set(labels).size === 1; }
+
+function majority(labels) {
+  const c = {};
+  labels.forEach(l => c[l]=(c[l]||0)+1);
+  return Object.entries(c).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'Unknown';
+}
+
+function majorityVote(labels) { return majority(labels); }
+
+function dtPredict(node, record) {
+  if (node.leaf) return node.label;
+  return record.enc[node.fi] <= node.th
+    ? dtPredict(node.left,  record)
+    : dtPredict(node.right, record);
+}
+
+// ======================================================
+// METRICS
+// ======================================================
+function calcAccuracy(preds, test) {
+  const correct = preds.filter((p,i)=>p===test[i].category).length;
+  return (correct/test.length)*100;
+}
+
+function buildCM(preds, test, categories) {
+  const cm = {};
+  categories.forEach(a => { cm[a]={}; categories.forEach(p=>cm[a][p]=0); });
+  preds.forEach((p,i) => {
+    const a = test[i].category;
+    if (cm[a]) cm[a][p] = (cm[a][p]||0)+1;
+  });
+  return cm;
+}
+
+async function sweepK(train, test, ks) {
+  const res = [];
+  for (const k of ks) {
+    const preds = test.map(r => knnPredict(r, train, k));
+    res.push({ k, acc: calcAccuracy(preds, test) });
+    await sleep(0);
+  }
+  return res;
+}
+
+// ======================================================
+// RENDER
+// ======================================================
+function renderMetrics(knnAcc, knnTime, n, dtAcc, dtTime, knnMem, dtMem) {
+  document.getElementById('knn-acc').textContent   = knnAcc.toFixed(1)+'%';
+  document.getElementById('knn-acc-sub').textContent = `${Math.round(knnAcc/100*n)} / ${n} doğru`;
+  document.getElementById('knn-time').textContent  = knnTime+'ms';
+  document.getElementById('knn-mem').textContent   = knnMem.toFixed(3)+' MB';
+  document.getElementById('dt-acc').textContent    = dtAcc.toFixed(1)+'%';
+  document.getElementById('dt-acc-sub').textContent  = `${Math.round(dtAcc/100*n)} / ${n} doğru`;
+  document.getElementById('dt-time').textContent   = dtTime+'ms';
+  document.getElementById('dt-mem').textContent    = dtMem.toFixed(3)+' MB';
+}
+
+// Bellek hesaplama yardımcıları
+function estimateKNNMemoryMB(trainData) {
+  // KNN tüm eğitim verisini bellekte tutar: her kayıt için enc dizisi + category string
+  const bytesPerRecord =
+    trainData[0].enc.length * 8 +   // Float64 per feature
+    (trainData[0].category ? trainData[0].category.length * 2 : 10) + // UTF-16 string
+    64;                               // JS object overhead ~64 bytes
+  return (trainData.length * bytesPerRecord) / (1024 * 1024);
+}
+
+function estimateDTMemoryMB(node) {
+  // DT ağaç düğümlerini özyinelemeli olarak sayar
+  if (!node) return 0;
+  const nodeBytes = node.leaf
+    ? 40 + (node.label ? node.label.length * 2 : 0)
+    : 80; // fi, th, left, right referansları
+  return nodeBytes / (1024 * 1024) +
+    estimateDTMemoryMB(node.left) +
+    estimateDTMemoryMB(node.right);
+}
+
+function renderCM(elId, cm, categories) {
+  const cats = categories.filter(c => cm[c]);
+  let html = '<table class="cm-table"><tr><th>G\\T</th>';
+  cats.forEach(c => html += `<th>${c.substring(0,8)}</th>`);
+  html += '</tr>';
+  cats.forEach(actual => {
+    html += `<tr><th>${actual.substring(0,8)}</th>`;
+    cats.forEach(pred => {
+      const v   = cm[actual]?.[pred] || 0;
+      const cls = actual===pred ? 'diagonal' : (v>0 ? 'off' : '');
+      html += `<td class="${cls}">${v}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</table>';
+  document.getElementById(elId).innerHTML = html;
+}
+
+function renderCharts(knnAcc, dtAcc, knnTime, dtTime, catDist, kSweep) {
+  const C = Chart.defaults;
+  C.color = '#6b7a99';
+  C.borderColor = '#1e2636';
+  C.font.family = "'Space Mono', monospace";
+
+  const bg  = '#0b0e14';
+  const knn = '#3dffa0';
+  const dt  = '#ff6b6b';
+  const grid = { color: '#1e2636' };
+
+  // Destroy existing
+  Object.values(charts).forEach(c => c?.destroy());
+
+  // 1. Accuracy bar
+  charts.acc = new Chart(document.getElementById('chart-accuracy'), {
+    type: 'bar',
+    data: {
+      labels: ['KNN', 'Decision Tree'],
+      datasets: [{ data: [knnAcc, dtAcc], backgroundColor: [knn+'aa', dt+'aa'],
+                   borderColor: [knn, dt], borderWidth: 1.5, borderRadius: 6 }]
+    },
+    options: { plugins:{legend:{display:false}}, scales:{
+      x:{grid}, y:{grid, min:0, max:100, ticks:{callback:v=>v+'%'}}
+    }}
+  });
+
+  // 2. Time bar
+  charts.time = new Chart(document.getElementById('chart-time'), {
+    type: 'bar',
+    data: {
+      labels: ['KNN', 'Decision Tree'],
+      datasets: [{ data: [knnTime, dtTime], backgroundColor: [knn+'aa', dt+'aa'],
+                   borderColor: [knn, dt], borderWidth: 1.5, borderRadius: 6 }]
+    },
+    options: { plugins:{legend:{display:false}}, scales:{
+      x:{grid}, y:{grid, ticks:{callback:v=>v+'ms'}}
+    }}
+  });
+
+  // 3. Category distribution (doughnut)
+  const catLabels = Object.keys(catDist);
+  const palette   = ['#3dffa0','#ff6b6b','#ffd166','#06d6a0','#118ab2','#ef476f','#8338ec'];
+  charts.dist = new Chart(document.getElementById('chart-dist'), {
+    type: 'doughnut',
+    data: {
+      labels: catLabels,
+      datasets: [{ data: catLabels.map(c=>catDist[c]),
+                   backgroundColor: catLabels.map((_,i)=>palette[i%palette.length]+'cc') }]
+    },
+    options: { plugins:{ legend:{ position:'right', labels:{boxWidth:10, font:{size:9}} } } }
+  });
+
+  // 4. K sweep line
+  charts.kk = new Chart(document.getElementById('chart-knn-k'), {
+    type: 'line',
+    data: {
+      labels: kSweep.map(x=>'k='+x.k),
+      datasets: [{ label: 'KNN Doğruluk', data: kSweep.map(x=>x.acc),
+                   borderColor: knn, backgroundColor: knn+'22',
+                   tension: .3, fill: true, pointRadius: 4 }]
+    },
+    options: { plugins:{legend:{display:false}}, scales:{
+      x:{grid}, y:{grid, min:0, max:100, ticks:{callback:v=>v+'%'}}
+    }}
+  });
+}
+
+// ======================================================
+// HELPERS
+// ======================================================
+function setStatus(msg, cls='') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = cls;
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// SheetJS zaten <head>'de yükleniyor — burada ek bir şey yapmaya gerek yok.
+</script>
+</body>
+</html>
